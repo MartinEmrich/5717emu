@@ -9,25 +9,26 @@ I made this because the chip inside my mouse was broken. There are several other
 Connection
 ----------
 
-Arduino nano | original 5717 pin
-A0  | 1
-A1  | 2
-A2  | 3
-A3  | 4
-D4  | 5
-D3  | 6
---  | 7
---  | 8
-GND | 9
---  | 10
---  | 11
-D10 | 12
-D9  | 13
-D8  | 14
-D7  | 15
-D6  | 16
-D5  | 17
-5V  | 18
+| Arduino nano | original 5717 pin|
+|--------------|------------------|
+| A0  | 1| 
+| A1  | 2| 
+| A2  | 3| 
+| A3  | 4| 
+| D4  | 5| 
+| D3  | 6| 
+| --  | 7| 
+| --  | 8| 
+| GND | 9| 
+| --  | 10| 
+| --  | 11| 
+| D10 | 12| 
+| D9  | 13| 
+| D8  | 14| 
+| D7  | 15| 
+| D6  | 16| 
+| D5  | 17| 
+| 5V  | 18| 
 
 Links & Credits
 ---------------
