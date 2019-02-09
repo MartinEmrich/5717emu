@@ -3,7 +3,7 @@
     Emulates the CSG 5717 controller (inside a Commodore 1351 mouse)
     on an Arduino Nano
 
-  (c) 2018 Martin Emrich <martin@martinemrich.me>
+  (c) 2019 Martin Emrich <martin@martinemrich.me>
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
