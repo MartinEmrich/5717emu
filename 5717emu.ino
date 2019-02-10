@@ -124,8 +124,7 @@ void update_pos_y()
     default: break;
   }
 
-  // note the minus to avoid inverted-y-axis, it's not a flight simulator!
-  y_pos = (y_pos - y_dir) & 0x3F;
+  y_pos = (y_pos + y_dir) & 0x3F;
 
   old_y = y;
 }
