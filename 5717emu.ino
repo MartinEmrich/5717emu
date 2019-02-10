@@ -26,6 +26,7 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include <math.h>
 
 /* run calibration at startup */
 //#define CALIBRATE
@@ -40,7 +41,7 @@
 #define MAX_Y1 973
 
 /* Hysteresis: plus/minus this from the middle between low and high range for sensors */
-#define QUAD_HYSTERESIS 100
+#define QUAD_HYSTERESIS 20
 
 /*
    Pin connections
@@ -78,10 +79,19 @@ uint8_t y1 = 0;
 uint8_t old_x = 0;
 uint8_t old_y = 0;
 
-uint8_t x_pos = 0;
-uint8_t y_pos = 0;
+volatile uint8_t x_pos = 0;
+volatile uint8_t y_pos = 0;
 
-#define raw2bit(Q,R,MAX_R) { if (Q == 0) { if (R > (MAX_R/2+QUAD_HYSTERESIS)) Q = 1; } else { if (R < (MAX_R/2-QUAD_HYSTERESIS)) Q = 0; } }
+//#define raw2bit(Q,R,MAX_R) { if (Q == 0) { if (R > (MAX_R/2+QUAD_HYSTERESIS)) Q = 1; } else { if (R < (MAX_R/2-QUAD_HYSTERESIS)) Q = 0; } }
+#define raw2bit(Q,R,MAX_R) { if (R > (MAX_R/2+QUAD_HYSTERESIS)) Q = 1; if (R < (MAX_R/2-QUAD_HYSTERESIS)) Q = 0; }
+
+/* Unused alternative approach: calculate phase angle of quad signal */
+#define norm_x0 ((raw_x0 - (MAX_X0/2.0f))/(MAX_X0/2.0f))
+#define norm_x1 ((raw_x1 - (MAX_X1/2.0f))/(MAX_X1/2.0f))
+#define norm_y0 ((raw_y0 - (MAX_Y0/2.0f))/(MAX_Y0/2.0f))
+#define norm_y1 ((raw_y1 - (MAX_Y1/2.0f))/(MAX_Y1/2.0f))
+#define angle_y() (int16_t)(atanf(norm_y0/norm_y1)*100)
+#define angle_x() (int16_t)(atanf(norm_x0/norm_x1)*100)
 
 void update_pos_y()
 {
@@ -107,7 +117,7 @@ void update_pos_y()
   }
 
   // note the minus to avoid inverted-y-axis, it's not a flight simulator!
-  y_pos = (y_pos - y_dir) % 64;
+  y_pos = (y_pos - y_dir) & 0x3F;
 
   old_y = y;
 }
@@ -207,7 +217,7 @@ uint16_t x_delay;
 uint16_t y_delay;
 
 #define triStatePin(PIN) pinMode(PIN, INPUT);
-#define pullUpPin(PIN) pinMode(PIN, OUTPUT); digitalWrite(PIN, HIGH);
+#define pullUpPin(PIN) digitalWrite(PIN, HIGH);pinMode(PIN, OUTPUT);
 
 /* One cycle of
 
@@ -215,37 +225,51 @@ uint16_t y_delay;
  *  * Transmitting both axes to C64
 */
 void measureTransmitCycle() {
-  digitalWrite(LED_BUILTIN, HIGH);
+  uint16_t t = TCNT1;
   hpTimerStart();
 
+  // Diagnose: LED is on while the interrupt procedure runs
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  // Toggle pin 12 if the interrupt pin missed a sync event
+  if (t > 1560) {
+    // we skipped a beat!
+    digitalWrite(12, ! digitalRead(12) );
+  }
+
+
+  /* tristate pins */
+  triStatePin(POT_X);
+  triStatePin(POT_Y);
+
   update_one_direction(); // takes approx. 240us
+
 
   /* Position to delay (2uS per value) */
   x_delay = (x_pos * 2);
   y_delay = (y_pos * 2);
 
-  /* wait 260µS (half of the SID measuring cycle) plus another 64 c64 cycles (ca. 65µS) */
-#define TX_START_OFFSET 325
+  /* wait 256µS (half of the SID measuring cycle) plus another 64 (ca. 65µS) */
+#define TX_START_OFFSET 320
 
-  /* send position encoded as delay */
-  if (x_delay < y_delay)
-  { // pos_x comes first
-    hpTimerWaituS(TX_START_OFFSET + x_delay);
-    pullUpPin(POT_X);
-    hpTimerWaituS(TX_START_OFFSET + y_delay);
-    pullUpPin(POT_Y);
+  /* wait until 480µS elapsed before tristating the POT pins again */
+#define TX_END_OFFSET 480
+
+  // Start 5µs "early", because switching from tristate to high takes some time
+  uint16_t xtime = (TX_START_OFFSET + x_delay - 5 ) * 2;
+  uint16_t ytime = (TX_START_OFFSET + y_delay - 5 ) * 2;
+  uint8_t xset = 0;
+  uint8_t yset = 0;
+  while (TCNT1 <= TX_END_OFFSET * 2) {
+    if (!xset && TCNT1 >= xtime) {
+      pullUpPin(POT_X);
+      xset = 1;
+    }
+    if (!yset && TCNT1 >= ytime) {
+      pullUpPin(POT_Y);
+      yset = 1;
+    }
   }
-  else
-  { // pos_y comes first
-    hpTimerWaituS(TX_START_OFFSET + y_delay);
-    pullUpPin(POT_Y);
-    hpTimerWaituS(TX_START_OFFSET + x_delay);
-    pullUpPin(POT_X);
-  }
-
-#define TX_END_OFFSET 488 // TODO: it's 487.5, so we might use the timer's half-us-precision
-  hpTimerWaituS(TX_END_OFFSET);
-
   /* tristate pins */
   triStatePin(POT_X);
   triStatePin(POT_Y);
@@ -260,6 +284,10 @@ void setup() {
   pinMode(QUAD_Y0, INPUT);
   pinMode(QUAD_Y1, INPUT);
   pinMode(RIGHT_BUTTON, INPUT);
+
+  pinMode(2, INPUT);
+  pinMode(3, INPUT);
+
   pinMode(SYNC_INPUT, INPUT);
 
   pinMode(JOY_UP, INPUT);
@@ -268,18 +296,26 @@ void setup() {
   pinMode(JOY_LEFT, INPUT);
 
   // Outputs
+  pinMode(12, OUTPUT);
   triStatePin( POT_X);
   triStatePin( POT_Y);
+  // pinMode(POT_X, INPUT_PULLUP);
+  // pinMode(POT_Y, INPUT_PULLUP);
 
 #ifdef CALIBRATE
   Serial.begin(115200);
   calibrate();
 #endif
+  Serial.begin(115200);
 
   attachInterrupt(digitalPinToInterrupt(SYNC_INPUT), measureTransmitCycle, LOW);
 }
 
+
 void loop()
 {
-  delay(1000);
+  /* do nothing here, all work is done in the interrupt routine */
+  while (true) {
+    asm ("NOP");
+  }
 }
