@@ -66,4 +66,6 @@ http://archive.6502.org/datasheets/mos_6581_sid.pdf
 A interesting document is attached here.
 http://cbm-hackers.2304266.n4.nabble.com/MOS-5717-td4660680.html
 
+Another adapter:
+http://sensi.org/~svo/[m]ouse/
 
