@@ -26,7 +26,7 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <math.h>
+//#include <math.h>
 
 /* run calibration at startup */
 //#define CALIBRATE
@@ -55,8 +55,16 @@
 
 #define RIGHT_BUTTON 4
 
+//#define SCHMITT_TRIGGER_ON_2
+
+#ifdef SCHMITT_TRIGGER_ON_2
 // sync input (POT_Y from C64)
+#define SYNC_INPUT 2
+#define SYNC_MODE LOW
+#else
 #define SYNC_INPUT 3
+#define SYNC_MODE LOW
+#endif
 
 // Joystick directions (Up is sent for Right button!)
 #define JOY_UP 5
@@ -228,19 +236,20 @@ void measureTransmitCycle() {
   uint16_t t = TCNT1;
   hpTimerStart();
 
+  // pinMode(SYNC_INPUT, INPUT);
   // Diagnose: LED is on while the interrupt procedure runs
   digitalWrite(LED_BUILTIN, HIGH);
 
   // Toggle pin 12 if the interrupt pin missed a sync event
-  if (t > 1560) {
+  if (t > 1060) {
     // we skipped a beat!
     digitalWrite(12, ! digitalRead(12) );
   }
 
 
   /* tristate pins */
-  triStatePin(POT_X);
-  triStatePin(POT_Y);
+ // triStatePin(POT_X);
+ // triStatePin(POT_Y);
 
   update_one_direction(); // takes approx. 240us
 
@@ -290,6 +299,11 @@ void setup() {
 
   pinMode(SYNC_INPUT, INPUT);
 
+  /* Caution: they are pulled high inside CIA, and are intended to be shorted to ground to trigger.
+   *  I guess it's a bad idea to pull them high here (see https://www.c64-wiki.de/wiki/Controlport)
+   *  
+   *  We leave them as input for now.
+   */
   pinMode(JOY_UP, INPUT);
   pinMode(JOY_DOWN, INPUT);
   pinMode(JOY_RIGHT, INPUT);
@@ -297,18 +311,17 @@ void setup() {
 
   // Outputs
   pinMode(12, OUTPUT);
+  digitalWrite(12, LOW);
+
   triStatePin( POT_X);
   triStatePin( POT_Y);
-  // pinMode(POT_X, INPUT_PULLUP);
-  // pinMode(POT_Y, INPUT_PULLUP);
 
 #ifdef CALIBRATE
   Serial.begin(115200);
   calibrate();
 #endif
-  Serial.begin(115200);
 
-  attachInterrupt(digitalPinToInterrupt(SYNC_INPUT), measureTransmitCycle, LOW);
+  attachInterrupt(digitalPinToInterrupt(SYNC_INPUT), measureTransmitCycle, SYNC_MODE);
 }
 
 
@@ -317,5 +330,11 @@ void loop()
   /* do nothing here, all work is done in the interrupt routine */
   while (true) {
     asm ("NOP");
+    /* if (TCNT1 > 1040) {
+       digitalWrite(12, ! digitalRead(12) );
+       noInterrupts();
+       measureTransmitCycle();
+       interrupts();
+      } */
   }
 }
